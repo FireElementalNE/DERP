@@ -14,12 +14,12 @@ import sys
 from sets import Set
 
 # import the messaging protocol
-from P2P_MSG import *
+from data.P2P_MSG import *
 
 # import the tracker configuration
 from DERPMOM_CONFIG import *
 
-import TargetData
+import data.TargetData
 
 class DerpMom:
 	
@@ -170,7 +170,7 @@ class DerpMom:
 		elif msg_data.getMessageType() == MSG_TARGET_DATA:
 
 			serial = msg_data.getMessageData()
-			tdata = TargetData.TargetData()
+			tdata = data.TargetData.TargetData()
 			tdata.unserialize(serial)
 			tdata.serializeToFile(tdata.ip_addr,DERPMOM_TARGET_DATA_DIR)
 

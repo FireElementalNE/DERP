@@ -7,7 +7,7 @@ import socket
 import os, sys
 
 # Import the peer-2-peer messaging protocol
-from P2P_MSG import *
+from data.P2P_MSG import *
 
 # Import from the Derplette Configuration
 from DERPLETTE_CONFIG import *
@@ -23,7 +23,7 @@ from DERPLETTE_CONFIG import *
 #s.close()
 #print 'Received', repr(data)
 
-import TargetData
+import data.TargetData
 
 class Derplette:
 

@@ -9,13 +9,19 @@
 from Tkinter import *
 
 
-from pygmaps import maps
+from libs.pygmaps import maps
 from pygeoip import GeoIP
 import os, sys, re, webbrowser, errno, socket, subprocess
 from time import gmtime, strftime
 
 # Data Classes
-import Coordinates, OperatingSystem, Port, Service, TargetData, Timestamp, parseXML, DirectoryViewerApp
+import data.Coordinates
+import data.Port
+import data.Service
+import data.TargetData
+import data.Timestamp
+import data.parseXML
+import data.DirectoryViewerApp
 
 # Derp class
 import Derplette, DerpletteDaemon
@@ -90,6 +96,7 @@ class DerpletteApp:
 				print 'ERROR: Counld not get ip from hostname'
 				lat = 0
 				lng = 0
+				return
 			xmlPath =  TARGET_XML + targetIP + '.xml'
 			htmlPath = TARGET_HTML + targetIP + '.html'
 			mymap = maps(lat,lng,16) #create google map file
@@ -109,7 +116,7 @@ class DerpletteApp:
 				returnValue.wait()
 				#os.system('nmap ' + args + ' ' + targetIP + ' > /dev/null') 
 				tempDict = {}
-				runTime,hostName,HostIP,tempDict = parseXML.parseMyXML(xmlPath)
+				runTime,hostName,HostIP,tempDict = data.parseXML.parseMyXML(xmlPath)
 			
 				# Create a target DATA 
 				target_data = self.createTargetData(targetIP, tempDict, hostName, lat, lng)
@@ -137,7 +144,7 @@ class DerpletteApp:
 	def createTargetData(self, targetIP, tempDict, hostName, lat, lng):
   
 		# Create an empty Target Data object
-		target_data = TargetData.TargetData()
+		target_data = data.TargetData.TargetData()
 
 		# Add the ip address and hostname
 		target_data.setIP(str(targetIP))
@@ -145,14 +152,14 @@ class DerpletteApp:
 
 		# Create a coordinates object from the coordinates
 		# 	and add it to the target data
-		c = Coordinates.Coordinates(lat,lng)
+		c = data.Coordinates.Coordinates(lat,lng)
 		target_data.addCoordinates(c)
 		
 		# Create ports and add them to the target data
 		for key,value in tempDict.iteritems():            		
 			pNum = str(key)            
 			pState = str(value[2])
-			tempPort = Port.Port(pState,pNum)
+			tempPort = data.Port.Port(pState,pNum)
 			target_data.addPort(tempPort)
 		
 		# Return the created target data object 

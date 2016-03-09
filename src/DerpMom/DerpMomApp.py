@@ -2,7 +2,7 @@
 # import the Tk stuff
 from Tkinter import *
 
-import DirectoryViewerApp
+import data.DirectoryViewerApp
 
 import os, sys
 
@@ -67,6 +67,6 @@ class DerpMomApp:
 
 		window = Tk()
 		window.title("Derpmom - Target Data")
-		dirApp = DirectoryViewerApp.DirectoryViewerApp(window,DERPMOM_TARGET_DATA_DIR)
+		dirApp = data.DirectoryViewerApp.DirectoryViewerApp(window,DERPMOM_TARGET_DATA_DIR)
 		window.mainloop()		
 
