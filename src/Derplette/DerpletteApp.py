@@ -23,6 +23,8 @@ import data.Timestamp
 import data.parseXML
 import data.DirectoryViewerApp
 
+import WorkerThread
+
 # Derp class
 import Derplette, DerpletteDaemon
 from DERPLETTE_CONFIG import *
@@ -165,6 +167,11 @@ class DerpletteApp:
 		# Return the created target data object 
 		return target_data
 
+
+	def register_threaded(self):
+		daemon = DerpletteDaemon.DerpletteDaemon(DERPLETTE_PIDFILE)
+		daemon.start()
+
 	# -----------------------------------------------------------------
 	#  Register
 	# -----------------------------------------------------------------
@@ -173,9 +180,11 @@ class DerpletteApp:
 		retval = os.fork()
 
 		if retval == 0:
+			pool = WorkerThread.ThreadPool(1)
+			pool.add_task(self.register_threaded)
+			pool.wait_completion()
 			# Start the daemon
-			daemon = DerpletteDaemon.DerpletteDaemon(DERPLETTE_PIDFILE)
-			daemon.start()
+			
 		else:
 
 			print "Derplette started on port " + str(DERPLETTE_PORT_NUM) #+ " with pid " + pid 
