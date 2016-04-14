@@ -1,18 +1,23 @@
 #--------------------------------------------------------------------------------
 #
-#Derp GUI in python TK
-#Team 143
+#                              Derp GUI in python TK
 #
 #--------------------------------------------------------------------------------
 
 # For stuff involving TK
 from Tkinter import *
 
-
 from libs.pygmaps import maps
 from pygeoip import GeoIP
-import os, sys, re, webbrowser, errno, socket, subprocess
+import os
+import sys
+import re
+import webbrowser
+import errno
+import socket
+import subprocess
 from time import gmtime, strftime
+import threading
 
 # Data Classes
 import data.Coordinates
@@ -30,12 +35,17 @@ import Derplette, DerpletteDaemon
 from DERPLETTE_CONFIG import *
 
 class DerpletteApp:
+	# TODO: stop using os.system() use subprocess.popen()
 	IP = '' #Next items are created for simple transfer of data
 	hostName = ''
 	ports = {}
 	state = ''
-	def __init__(self,root): #define wndow
-        
+	def __init__(self,root):
+		"""
+		creates TK object
+		:param root: ???
+		"""
+        # TODO: lookup root
 		frame = Frame(root)
 		frame.pack()
 	
@@ -44,7 +54,7 @@ class DerpletteApp:
         
 		self.target = StringVar() #target box
 		self.textbox = Entry(frame,textvariable=self.target)
-		self.target.set("IP or Hostname")
+		self.target.set("wikipedia.org")
 		self.textbox.grid(row=0, column=1, columnspan=4)
 
 		self.target_label = Label(frame, text="NMAP Args:")
@@ -52,7 +62,7 @@ class DerpletteApp:
 
 		self.target = StringVar() #argument box
 		self.textbox1 = Entry(frame,textvariable=self.target)
-		self.target.set("NMAP ARGUMENTS")
+		self.target.set("-sV -p20")
 		self.textbox1.grid(row=1, column=1, columnspan=4)
        
 		self.scanButton = Button(frame, text='SCAN', command=self.scanit) #button to initiate scan of target
@@ -73,69 +83,89 @@ class DerpletteApp:
 		self.button = Button(frame, text='Quit', command=root.destroy) #button to quit
 		self.button.grid(row=2,column=5, columnspan=1)
 
-	def scanit(self): #funtion to scan on record results
-		flag = True
-		gic = GeoIP(GEOIP_DATABASE) #change this to the location of GeoLiteCity.dat
-		flag = False
-		target = self.textbox.get()
-		args = self.textbox1.get()
-		if target != '': #error checking (not empty string)
-			try:
-				targetIP = socket.gethostbyname(target) #attempts to get an ip from hostnam/ip passed through 
-				gic = GeoIP(GEOIP_DATABASE) #load geoIP database
-				addr = gic.record_by_addr(targetIP) #if this works (getting ip) find address of ip
-				try: #try to get longatudinal and latitudinal coordanates
-					addr['latitude']
-					addr['longitude']
-				except TypeError:  #if ip has no address (like 127.0.0.1) set lat and lng to 0,0
-					lat = 0
-					lng = 0
-				else: #else set them to correct coordanates
-					lat = addr['latitude']
-					lng = addr['longitude']
 
+	def build_target_data(self, target_ip, coord):
+		"""
+		takes the coordinates and the target_ip and creates a TargetData object
+		:param target_ip: the ip of the target
+		:param coord: a tuple of longitude and latitude
+		:return: the target_data object built off of the two params
+		"""
+		xml_path =  TARGET_XML + target_ip + '.xml'
+		temp_dict = {}
+		run_time, host_name, host_ip, temp_dict = data.parseXML.parseMyXML(xml_path)
+		# Create a target DATA 
+		target_data = self.createTargetData(target_ip, temp_dict, host_name, coord[0], coord[1])		
+		# Write the TargetData to a file
+		target_data.serializeToFile(target_data.ip_addr, TARGET_DATA_DIR)
+		return target_data
+
+	def send_target_to_derpmom(self,target_data):
+		"""
+		sends TargetData object to the registered DerpMom
+		:param target_data: the TargetData object of the target
+		:return: nothing
+		"""
+		try:
+			d = Derplette.Derplette()
+			d.sendTargetData(target_data)
+		except socket.error as e:
+			if e.errno == errno.ECONNREFUSED:
+				print "Could not connect to DerpMom...."
+
+	def nmap_scan(self,target_ip, coord):
+		"""
+		creates an nmap scan of the target and sends out
+		:param target_ip: the ip of the target
+		:param coord: a tuple of longitude and latitude
+		:return: nothing
+		"""
+		args = self.textbox1.get()
+		if '-oX' in args:
+			print 'ERROR: Cannot use -oX option (we already did that for you).'
+		else:
+			args += ' -oX ' + TARGET_XML + target_ip + '.xml'
+			command = 'nmap ' + args + ' ' + target_ip + ' > /dev/null';
+			print command
+			p = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+			(out, err) = (p.stdout, p.stderr)
+			# TODO: make this better
+			if len(err.read()) < 5:
+				target_data = self.build_target_data(target_ip, coord)
+				self.send_target_to_derpmom(target_data)
+			else:
+				print 'Somthing went wrong with the scan:'
+				print len(err.read())
+
+
+	def scanit(self): #funtion to scan on record results
+		"""
+		scans a target, the target is taken from the TK box target
+		:return: nothing
+		"""
+		gic = GeoIP(GEOIP_DATABASE) #change this to the location of GeoLiteCity.dat
+		target = self.textbox.get()
+		if target != '' and target != 'IP or Hostname': #error checking (not empty string)
+			try:
+				target_ip = socket.gethostbyname(target) #attempts to get an ip from hostnam/ip passed through 
+				gic = GeoIP(GEOIP_DATABASE) #load geoIP database
+				addr = gic.record_by_addr(target_ip) #if this works (getting ip) find address of ip
+				lat = addr['latitude']
+				lng = addr['longitude']
+				htmlPath = TARGET_HTML + target_ip + '.html'
+				mymap = maps(lat,lng,16) #create google map file
+				mymap.addradpoint(lat, lng, 100, "#0000FF")
+				mymap.draw(htmlPath)
+				# TODO: maybe add this back later...
+				# if lng != 0 and lat !=  0:
+				#	webbrowser.open(htmlPath)
+				self.nmap_scan(target_ip, [lat,lng])
 			except socket.gaierror: #if finding IP fails
 				print 'ERROR: Counld not get ip from hostname'
-				lat = 0
-				lng = 0
-				return
-			xmlPath =  TARGET_XML + targetIP + '.xml'
-			htmlPath = TARGET_HTML + targetIP + '.html'
-			mymap = maps(lat,lng,16) #create google map file
-			mymap.addradpoint(lat, lng, 100, "#0000FF")
-			mymap.draw(htmlPath)
-			if lng != 0 and lat !=  0:
-				webbrowser.open(htmlPath)
-			if args == 'NMAP ARGUMENTS': #error checking
-				args = ''
-			messege = ''
-			if '-sV' not in args:
-				args = args + ' -sV '
-			if '-oX' not in args:
-				args += ' -oX ' + xmlPath
-				command = 'nmap ' + args + ' ' + targetIP + ' > /dev/null';
-				returnValue = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True)
-				returnValue.wait()
-				#os.system('nmap ' + args + ' ' + targetIP + ' > /dev/null') 
-				tempDict = {}
-				runTime,hostName,HostIP,tempDict = data.parseXML.parseMyXML(xmlPath)
-			
-				# Create a target DATA 
-				target_data = self.createTargetData(targetIP, tempDict, hostName, lat, lng)
-				
-				# Write the TargetData to a file
-				target_data.serializeToFile(target_data.ip_addr, TARGET_DATA_DIR)
+			except TypeError:  #if ip has no address (like 127.0.0.1) set lat and lng to 0,0
+				# TODO: make more graceful
+				print 'Could not get coordinates from GeoIP Database.'
 
-				# Send the target data to the derp mom
-				try:
-					d = Derplette.Derplette()
-					d.sendTargetData(target_data)
-				except socket.error as e:
-					if e.errno == errno.ECONNREFUSED:
-						print "Could not connect to DerpMom...."		
-			else:
-				print 'ERROR: Cannot use -oX option (we already did that for you).'
-    
 
 	# -------------------------------------------------------------
 	#  Create Target Data
@@ -144,6 +174,15 @@ class DerpletteApp:
 	# 		and two coordinates and creates a TargetDataObject 
 	# --------------------------------------------------------------
 	def createTargetData(self, targetIP, tempDict, hostName, lat, lng):
+		"""
+		creates a target data object from the arguments
+		:param targetIP: the ip of the target
+		:param tempDict: ports
+		:param hostName: the hostname of the target
+		:param lat: the latitude of the target
+		:param lng: the longitude of the target
+		:return: a TargetData object
+		"""
   
 		# Create an empty Target Data object
 		target_data = data.TargetData.TargetData()
@@ -176,19 +215,18 @@ class DerpletteApp:
 	#  Register
 	# -----------------------------------------------------------------
 	def register(self):
-
+		"""
+		uses a fork() syscall to create a daemon and registers with the derpmom
+		:return: nothing
+		"""
 		retval = os.fork()
-
 		if retval == 0:
 			pool = WorkerThread.ThreadPool(1)
 			pool.add_task(self.register_threaded)
 			pool.wait_completion()
 			# Start the daemon
-			
 		else:
-
-			print "Derplette started on port " + str(DERPLETTE_PORT_NUM) #+ " with pid " + pid 
- 
+			print "Derplette started on port " + str(DERPLETTE_PORT_NUM) #+ " with pid " + pid
 			d = Derplette.Derplette()
 			d.sendRegister()
 
@@ -196,6 +234,10 @@ class DerpletteApp:
 	#
 	# -----------------------------------------------------------------
 	def unregister(self):
+		"""
+		unregister from the derpmom and destroy the derplette daemon
+		:return: nothing
+		"""
 		try:
 			d = Derplette.Derplette()
 			d.sendUnregister()
@@ -210,13 +252,16 @@ class DerpletteApp:
 	# 
 	# -----------------------------------------------------------------
 	def generateKeys(self):
-
+		"""
+		generate RSA keys
+		:return: nothing
+		"""
+		# TODO: generate ECC keys
 		keygen_cmd = "ssh-keygen -t rsa -f " + DERPLETTE_RSA_PATH + " -q -N " + DERPLETTE_RSA_PASSPHRASE
 		os.system(keygen_cmd)
 
 
 	def viewTargetData(self):
-
 		window = Tk()
 		window.title("Derplette - Target Data")
 		dirApp = DirectoryViewerApp.DirectoryViewerApp(window,TARGET_DATA_DIR)
